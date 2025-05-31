@@ -72,7 +72,13 @@ export const aiService = {
       const response = await axios.post(
         `${BASE_URL}/${MODEL}:generateContent?key=${apiKey}`,
         {
-          contents: [{ parts: [{ text: prompt }] }]
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          },
         }
       );
       
@@ -97,7 +103,8 @@ export const aiService = {
     const { min: minScenes, max: maxScenes } = getRecommendedSceneCount(duration);
     
     const prompt = `
-      Create a complete, professional ${format} script titled "${title}" with ${minScenes}-${maxScenes} distinct scenes.
+      Create a complete, professional ${format} script titled "${title}" with EXACTLY ${minScenes} distinct scenes.
+      This is CRITICAL - you must generate ${minScenes} scenes, no more, no less.
       
       Project Details:
       - Description: ${description}
@@ -105,47 +112,34 @@ export const aiService = {
       - Style: ${storyStyle}
       - Duration: ${duration}
       
-      Requirements:
-      1. Generate exactly ${minScenes}-${maxScenes} scenes to properly pace the content
-      2. Each scene should be 10-20 seconds in length
-      3. Ensure smooth transitions between scenes
-      4. Include varied shot types (wide, medium, close-up) across scenes
+      Scene Requirements:
+      1. Generate EXACTLY ${minScenes} scenes (this is mandatory)
+      2. Each scene should be ${Math.floor(parseInt(duration) * 60 / minScenes)} seconds in length
+      3. Include clear transitions between scenes
+      4. Vary shot types (wide, medium, close-up) across scenes
       5. Balance dialogue/narration with visual elements
       
-      Content Guidelines:
-      - Opening Scene: Hook the audience with a strong visual or statement
-      - Middle Scenes: Develop the core message/story with supporting points
-      - Closing Scene: Clear call-to-action or memorable conclusion
+      Scene Structure:
+      - Scene 1: Strong opening hook (10-15 seconds)
+      - Scenes 2-${minScenes - 1}: Core content development
+      - Scene ${minScenes}: Impactful conclusion with call-to-action
       
-      Please provide:
-      1. A compelling synopsis (2-3 sentences)
-      2. ${minScenes}-${maxScenes} detailed scenes, each including:
-         - Scene description and purpose
-         - Specific script/narration text
-         - Detailed visual description
-         - Emotional tone and pacing notes
+      Format each scene EXACTLY as follows:
       
-      Format Requirements:
+      ---SCENE [number]---
+      DESCRIPTION: [Clear purpose and context]
+      SCRIPT: [Exact narration/dialogue]
+      VISUAL: [Detailed shot description]
+      TONE: [Emotional tone and pacing]
+      ---END SCENE---
+      
+      Start with a synopsis, then provide EXACTLY ${minScenes} scenes.
       
       SYNOPSIS:
       [2-3 sentence synopsis]
       
       SCENES:
-      
-      ---SCENE 1---
-      DESCRIPTION: [scene purpose and narrative context]
-      SCRIPT: [exact narration/dialogue text]
-      VISUAL: [detailed visual description]
-      TONE: [emotional tone and pacing]
-      ---END SCENE---
-      
-      [Repeat for each scene, maintaining story flow]
-      
-      Additional Notes:
-      - For ${format}, optimize scene length and pacing
-      - Target ${targetAudience} with appropriate language and visuals
-      - Maintain ${storyStyle} style throughout
-      - Total duration should fit within ${duration}
+      [Your ${minScenes} scenes here]
     `;
     
     try {
@@ -159,10 +153,8 @@ export const aiService = {
       const scenes: Scene[] = Array.from(sceneMatches).map((match, index) => {
         const [_, description, script, visual, tone] = match;
         
-        // Create a rich visual description combining the visual and tone information
         const visualDescription = `${visual.trim()}\n\nTone: ${tone.trim()}`;
         
-        // Initialize the scene with the generated content
         return {
           id: nanoid(),
           order: index,
@@ -172,18 +164,18 @@ export const aiService = {
           videoPrompt: '',
           voiceOver: {
             ...createInitialVoiceOver(),
-            text: script.trim(), // Initialize voice over with the script
+            text: script.trim(),
           },
         };
       });
       
-      // Ensure we have at least the minimum number of scenes
+      // Ensure we have exactly minScenes number of scenes
       while (scenes.length < minScenes) {
         scenes.push({
           id: nanoid(),
           order: scenes.length,
-          script: '',
-          visualDescription: '',
+          script: `[Scene ${scenes.length + 1} Content]`,
+          visualDescription: `[Visual description for scene ${scenes.length + 1}]`,
           imagePrompt: '',
           videoPrompt: '',
           voiceOver: createInitialVoiceOver(),
@@ -192,10 +184,10 @@ export const aiService = {
       
       return {
         synopsis,
-        scenes,
+        scenes: scenes.slice(0, minScenes), // Ensure we don't exceed minScenes
       };
     } catch (error) {
-      console.error('Error generating script:', error);
+      console.error('Failed to generate script:', error);
       throw new Error('Failed to generate script');
     }
   },
