@@ -49,6 +49,23 @@ const createInitialVoiceOver = (): VoiceOver => ({
   text: '',
 });
 
+const getRecommendedSceneCount = (duration: string): { min: number; max: number } => {
+  switch (duration) {
+    case '30-60 seconds':
+      return { min: 2, max: 4 };
+    case '1-2 minutes':
+      return { min: 3, max: 6 };
+    case '2-5 minutes':
+      return { min: 5, max: 10 };
+    case '5-10 minutes':
+      return { min: 8, max: 15 };
+    case '10+ minutes':
+      return { min: 12, max: 20 };
+    default:
+      return { min: 3, max: 6 };
+  }
+};
+
 export const aiService = {
   generateContent: async ({ prompt, apiKey }: GenerateContentRequest): Promise<GenerateContentResponse> => {
     try {
@@ -77,8 +94,10 @@ export const aiService = {
     duration,
     apiKey
   }: GenerateScriptRequest): Promise<GenerateScriptResponse> => {
+    const { min: minScenes, max: maxScenes } = getRecommendedSceneCount(duration);
+    
     const prompt = `
-      Create a complete, cohesive story for a ${format} titled "${title}".
+      Create a complete, professional ${format} script titled "${title}" with ${minScenes}-${maxScenes} distinct scenes.
       
       Project Details:
       - Description: ${description}
@@ -86,35 +105,47 @@ export const aiService = {
       - Style: ${storyStyle}
       - Duration: ${duration}
       
+      Requirements:
+      1. Generate exactly ${minScenes}-${maxScenes} scenes to properly pace the content
+      2. Each scene should be 10-20 seconds in length
+      3. Ensure smooth transitions between scenes
+      4. Include varied shot types (wide, medium, close-up) across scenes
+      5. Balance dialogue/narration with visual elements
+      
+      Content Guidelines:
+      - Opening Scene: Hook the audience with a strong visual or statement
+      - Middle Scenes: Develop the core message/story with supporting points
+      - Closing Scene: Clear call-to-action or memorable conclusion
+      
       Please provide:
       1. A compelling synopsis (2-3 sentences)
-      2. A detailed scene-by-scene breakdown where each scene connects logically to form a complete narrative arc. For each scene include:
-         - Scene description and its role in the overall story
-         - Detailed script/narration with specific dialogue or voiceover text
-         - Visual description including setting, actions, and key visual elements
-         - Suggested emotional tone and pacing
+      2. ${minScenes}-${maxScenes} detailed scenes, each including:
+         - Scene description and purpose
+         - Specific script/narration text
+         - Detailed visual description
+         - Emotional tone and pacing notes
       
-      Ensure the story has:
-      - Clear beginning, middle, and end
-      - Logical progression between scenes
-      - Consistent tone and style
-      - Appropriate pacing for the format and duration
-      
-      Format the output exactly as follows:
+      Format Requirements:
       
       SYNOPSIS:
-      [synopsis text]
+      [2-3 sentence synopsis]
       
       SCENES:
       
       ---SCENE 1---
-      DESCRIPTION: [scene description and its purpose in the story]
-      SCRIPT: [detailed script/narration text]
-      VISUAL: [comprehensive visual description]
-      TONE: [emotional tone and pacing notes]
+      DESCRIPTION: [scene purpose and narrative context]
+      SCRIPT: [exact narration/dialogue text]
+      VISUAL: [detailed visual description]
+      TONE: [emotional tone and pacing]
       ---END SCENE---
       
-      [repeat for each scene, maintaining story continuity]
+      [Repeat for each scene, maintaining story flow]
+      
+      Additional Notes:
+      - For ${format}, optimize scene length and pacing
+      - Target ${targetAudience} with appropriate language and visuals
+      - Maintain ${storyStyle} style throughout
+      - Total duration should fit within ${duration}
     `;
     
     try {
@@ -146,11 +177,11 @@ export const aiService = {
         };
       });
       
-      // If no scenes were parsed, create at least one
-      if (scenes.length === 0) {
+      // Ensure we have at least the minimum number of scenes
+      while (scenes.length < minScenes) {
         scenes.push({
           id: nanoid(),
-          order: 0,
+          order: scenes.length,
           script: '',
           visualDescription: '',
           imagePrompt: '',
