@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Copy, Eye } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../ui/card';
 import { Button } from '../ui/button';
@@ -13,7 +13,7 @@ interface StoryCardProps {
 
 export const StoryCard: React.FC<StoryCardProps> = ({ story }) => {
   const { createProject } = useProjectStore();
-  const navigate = Link.useNavigate();
+  const navigate = useNavigate();
   
   const handleUseTemplate = () => {
     createProject({
