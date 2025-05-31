@@ -101,9 +101,10 @@ export const aiService = {
     apiKey
   }: GenerateScriptRequest): Promise<GenerateScriptResponse> => {
     const { min: minScenes, max: maxScenes } = getRecommendedSceneCount(duration);
+    const sceneDuration = Math.floor(parseInt(duration) * 60 / minScenes);
     
     const prompt = `
-      Create a complete, professional ${format} script titled "${title}" with EXACTLY ${minScenes} distinct scenes.
+      Create a professional ${format} script titled "${title}" with EXACTLY ${minScenes} distinct scenes.
       This is CRITICAL - you must generate ${minScenes} scenes, no more, no less.
       
       Project Details:
@@ -111,73 +112,86 @@ export const aiService = {
       - Target Audience: ${targetAudience}
       - Style: ${storyStyle}
       - Duration: ${duration}
+      - Each scene should be approximately ${sceneDuration} seconds
       
-      Scene Requirements:
-      1. Generate EXACTLY ${minScenes} scenes (this is mandatory)
-      2. Each scene should be ${Math.floor(parseInt(duration) * 60 / minScenes)} seconds in length
-      3. Include clear transitions between scenes
-      4. Vary shot types (wide, medium, close-up) across scenes
-      5. Balance dialogue/narration with visual elements
+      Required Scene Structure:
+      1. Opening Scene (Hook): Captivating introduction (${Math.floor(sceneDuration * 0.8)} seconds)
+      2. Core Content Scenes: Detailed story development
+      3. Closing Scene: Strong conclusion with call-to-action
       
-      Scene Structure:
-      - Scene 1: Strong opening hook (10-15 seconds)
-      - Scenes 2-${minScenes - 1}: Core content development
-      - Scene ${minScenes}: Impactful conclusion with call-to-action
+      For EACH scene, provide DETAILED:
+      1. Visual Description: Camera angles, movements, transitions
+      2. Script/Narration: Exact dialogue or voiceover text
+      3. Image Generation Prompts: For AI image generation
+      4. Voice Direction: Tone, emotion, pacing
       
-      Format each scene EXACTLY as follows:
-      
-      ---SCENE [number]---
-      DESCRIPTION: [Clear purpose and context]
-      SCRIPT: [Exact narration/dialogue]
-      VISUAL: [Detailed shot description]
-      TONE: [Emotional tone and pacing]
-      ---END SCENE---
-      
-      Start with a synopsis, then provide EXACTLY ${minScenes} scenes.
+      Format EXACTLY as follows:
       
       SYNOPSIS:
       [2-3 sentence synopsis]
       
       SCENES:
-      [Your ${minScenes} scenes here]
+      
+      ---SCENE [number]---
+      DESCRIPTION: [Scene purpose and narrative context]
+      SCRIPT: [Exact narration/dialogue text]
+      VISUAL: [Detailed shot description, camera work]
+      IMAGE_PROMPT: [Detailed prompt for AI image generation]
+      VOICE: [Voice style, emotion, and delivery notes]
+      ---END SCENE---
+      
+      [Repeat for exactly ${minScenes} scenes]
+      
+      Remember:
+      - Each scene must smoothly transition to the next
+      - Vary shot types and compositions
+      - Include specific visual and audio direction
+      - Maintain consistent style and tone
+      - Focus on ${targetAudience} audience
+      - Match ${storyStyle} style throughout
     `;
     
     try {
       const { content } = await aiService.generateContent({ prompt, apiKey });
       
-      // Parse the AI response
       const synopsis = content.match(/SYNOPSIS:\n(.*?)(?=\n\nSCENES:)/s)?.[1].trim() || '';
       
-      const sceneMatches = content.matchAll(/---SCENE \d+---\nDESCRIPTION: (.*?)\nSCRIPT: (.*?)\nVISUAL: (.*?)\nTONE: (.*?)\n---END SCENE---/gs);
+      const sceneMatches = content.matchAll(/---SCENE \d+---\n(.*?)\n---END SCENE---/gs);
       
       const scenes: Scene[] = Array.from(sceneMatches).map((match, index) => {
-        const [_, description, script, visual, tone] = match;
-        
-        const visualDescription = `${visual.trim()}\n\nTone: ${tone.trim()}`;
+        const sceneContent = match[1];
+        const description = sceneContent.match(/DESCRIPTION: (.*?)(?=\nSCRIPT:)/s)?.[1].trim() || '';
+        const script = sceneContent.match(/SCRIPT: (.*?)(?=\nVISUAL:)/s)?.[1].trim() || '';
+        const visual = sceneContent.match(/VISUAL: (.*?)(?=\nIMAGE_PROMPT:)/s)?.[1].trim() || '';
+        const imagePrompt = sceneContent.match(/IMAGE_PROMPT: (.*?)(?=\nVOICE:)/s)?.[1].trim() || '';
+        const voice = sceneContent.match(/VOICE: (.*?)$/s)?.[1].trim() || '';
         
         return {
           id: nanoid(),
           order: index,
-          script: script.trim(),
-          visualDescription: visualDescription,
-          imagePrompt: '',
-          videoPrompt: '',
+          script: script,
+          visualDescription: `${visual}\n\nScene Purpose: ${description}`,
+          imagePrompt: imagePrompt,
+          videoPrompt: `Camera Work: ${visual}\nTransitions: Smooth transition to next scene\nTiming: Approximately ${sceneDuration} seconds`,
           voiceOver: {
             ...createInitialVoiceOver(),
-            text: script.trim(),
+            text: script,
+            emotion: voice.split(',')[0]?.trim() || 'neutral',
+            style: voice.split(',')[1]?.trim() || 'narrator',
           },
         };
       });
       
       // Ensure we have exactly minScenes number of scenes
       while (scenes.length < minScenes) {
+        const sceneNumber = scenes.length + 1;
         scenes.push({
           id: nanoid(),
           order: scenes.length,
-          script: `[Scene ${scenes.length + 1} Content]`,
-          visualDescription: `[Visual description for scene ${scenes.length + 1}]`,
-          imagePrompt: '',
-          videoPrompt: '',
+          script: `[Scene ${sceneNumber} Content]`,
+          visualDescription: `[Detailed visual description for scene ${sceneNumber}]`,
+          imagePrompt: `[Professional image generation prompt for scene ${sceneNumber}]`,
+          videoPrompt: `[Camera directions and transitions for scene ${sceneNumber}]`,
           voiceOver: createInitialVoiceOver(),
         });
       }
@@ -198,32 +212,36 @@ export const aiService = {
     apiKey
   }: GeneratePromptsRequest) => {
     const prompt = `
-      Based on this scene:
+      Based on this scene description:
       "${scene}"
       
-      And this visual description:
+      And this visual direction:
       "${visualDescription}"
       
-      Generate two detailed prompts:
-      1. A comprehensive image generation prompt for AI tools like Midjourney or DALL-E, including:
-         - Scene composition
-         - Lighting and atmosphere
-         - Key visual elements
-         - Style and artistic direction
-         
-      2. A detailed video motion prompt describing:
-         - Camera movements and angles
-         - Transitions and effects
-         - Timing and pacing
-         - Any special visual treatments
+      Generate two detailed, professional prompts:
       
-      Format the output as:
+      1. Image Generation Prompt:
+         - Ultra-detailed scene composition
+         - Specific lighting and atmosphere
+         - Camera angle and perspective
+         - Art style and visual treatment
+         - Key elements and focal points
+         - Color palette and mood
+         
+      2. Video Direction Prompt:
+         - Detailed camera movements
+         - Shot transitions and timing
+         - Visual effects and treatments
+         - Scene pacing and flow
+         - Technical specifications
+      
+      Format EXACTLY as:
       
       IMAGE PROMPT:
-      [detailed image prompt]
+      [Comprehensive image generation prompt]
       
       VIDEO PROMPT:
-      [detailed video motion prompt]
+      [Detailed video direction prompt]
     `;
     
     try {
@@ -234,7 +252,7 @@ export const aiService = {
       
       return { imagePrompt, videoPrompt };
     } catch (error) {
-      console.error('Error generating visual prompts:', error);
+      console.error('Failed to generate visual prompts:', error);
       throw new Error('Failed to generate visual prompts');
     }
   },
@@ -252,19 +270,30 @@ export const aiService = {
       Target audience: ${targetAudience}
       Style: ${storyStyle}
       
-      Provide detailed voice-over recommendations that will best convey the message and engage the audience. Include:
+      Provide detailed voice-over recommendations:
       
-      1. Voice characteristics
-      2. Performance direction
-      3. Optimized script for vocal delivery
+      1. Voice Characteristics:
+         - Gender and age range
+         - Vocal qualities
+         - Accent and pronunciation
       
-      Format your response exactly as:
+      2. Performance Direction:
+         - Emotional tone and intensity
+         - Pacing and rhythm
+         - Key emphasis points
+      
+      3. Technical Requirements:
+         - Recording quality
+         - Processing effects
+         - Music/SFX integration
+      
+      Format EXACTLY as:
       
       GENDER: [male/female/neutral]
-      EMOTION: [detailed emotional tone]
+      EMOTION: [detailed emotional direction]
       STYLE: [specific voice style]
-      DIRECTION: [performance notes and guidance]
-      MODIFIED SCRIPT: [script optimized for voice-over delivery]
+      DIRECTION: [complete performance notes]
+      MODIFIED SCRIPT: [optimized script with emphasis marks]
     `;
     
     try {
@@ -277,7 +306,7 @@ export const aiService = {
       
       return { gender, emotion, style, text };
     } catch (error) {
-      console.error('Error generating voice-over recommendations:', error);
+      console.error('Failed to generate voice-over recommendations:', error);
       throw new Error('Failed to generate voice-over recommendations');
     }
   }
